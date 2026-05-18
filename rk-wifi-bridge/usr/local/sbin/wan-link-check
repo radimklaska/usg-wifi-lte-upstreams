@@ -1,0 +1,139 @@
+#!/bin/bash
+# Probes upstream connectivity via wlan0. When the primary target fails,
+# tries the secondary before counting a failure. After FAIL_THRESHOLD
+# consecutive failures, brings eth0 link DOWN so the downstream USG WAN
+# detects carrier loss and fails over to its secondary connection. On the
+# first successful probe after a failure, brings eth0 back UP and lets
+# NetworkManager re-activate the router-lan profile.
+#
+# Failback push: the USG does not reliably switch back to its primary WAN
+# on its own. Once eth0 has been dropped (i.e. an outage actually happened)
+# and the primary probe target then stays clean for STABLE_THRESHOLD seconds,
+# we SSH to the secondary-WAN bridge (rk-lte-bridge) and ask it to drop its
+# eth0 briefly. That forces the USG off the secondary, back to us.
+
+set -u
+
+LOG_TAG=wan-link-check
+WLAN_IFACE=wlan0
+ETH_IFACE=eth0
+FAIL_THRESHOLD=3
+INTERVAL=5
+PING_TIMEOUT=2
+PRIMARY=1.1.1.1
+SECONDARY=8.8.8.8
+
+STABLE_THRESHOLD=180   # seconds of clean PRIMARY probes before pushing failback
+FAILBACK_HOST=rk-lte-bridge
+FAILBACK_USER=johndoe
+FAILBACK_KEY=/root/.ssh/id_failback_ed25519
+SSH_TIMEOUT=60
+
+fail_count=0
+eth_state=unknown
+needs_failback=0
+stability_active=0
+stable_since=0
+
+probe() {
+    ping -I "$WLAN_IFACE" -c 1 -W "$PING_TIMEOUT" -n "$1" >/dev/null 2>&1
+}
+
+set_eth_up() {
+    if [ "$eth_state" != "up" ]; then
+        logger -t "$LOG_TAG" "bringing $ETH_IFACE link UP"
+        ip link set "$ETH_IFACE" up 2>/dev/null || logger -t "$LOG_TAG" "ip link up failed"
+        eth_state=up
+    fi
+}
+
+set_eth_down() {
+    if [ "$eth_state" != "down" ]; then
+        logger -t "$LOG_TAG" "bringing $ETH_IFACE link DOWN (probe threshold reached)"
+        ip link set "$ETH_IFACE" down 2>/dev/null || logger -t "$LOG_TAG" "ip link down failed"
+        eth_state=down
+        needs_failback=1
+        stability_active=0
+        stable_since=0
+    fi
+}
+
+trigger_failback() {
+    logger -t "$LOG_TAG" "triggering USG failback via ${FAILBACK_HOST}"
+    if timeout "$SSH_TIMEOUT" ssh \
+            -i "$FAILBACK_KEY" \
+            -o StrictHostKeyChecking=accept-new \
+            -o BatchMode=yes \
+            -o ConnectTimeout=10 \
+            "${FAILBACK_USER}@${FAILBACK_HOST}" failback >/dev/null 2>&1; then
+        logger -t "$LOG_TAG" "failback trigger sent OK"
+        return 0
+    else
+        logger -t "$LOG_TAG" "failback trigger FAILED (rc=$?)"
+        return 1
+    fi
+}
+
+# Wait briefly for wlan0 device to exist before starting probes.
+for _ in $(seq 1 12); do
+    ip link show "$WLAN_IFACE" >/dev/null 2>&1 && break
+    sleep 5
+done
+
+logger -t "$LOG_TAG" "starting (interval=${INTERVAL}s threshold=${FAIL_THRESHOLD} primary=${PRIMARY} secondary=${SECONDARY} stable=${STABLE_THRESHOLD}s)"
+
+while true; do
+    primary_ok=0
+    if probe "$PRIMARY"; then
+        primary_ok=1
+        ok=1
+    elif probe "$SECONDARY"; then
+        ok=1
+        logger -t "$LOG_TAG" "primary ${PRIMARY} failed, secondary ${SECONDARY} OK"
+    else
+        ok=0
+    fi
+
+    if [ "$ok" -eq 1 ]; then
+        if [ "$fail_count" -gt 0 ]; then
+            logger -t "$LOG_TAG" "upstream recovered after $fail_count failures"
+            fail_count=0
+        fi
+        set_eth_up
+    else
+        fail_count=$((fail_count + 1))
+        logger -t "$LOG_TAG" "both probes failed ($fail_count/$FAIL_THRESHOLD)"
+        if [ "$fail_count" -ge "$FAIL_THRESHOLD" ]; then
+            set_eth_down
+        fi
+    fi
+
+    # Stability tracking. Only count clean primary probes; even a single
+    # primary failure (with secondary saving us) resets the window.
+    if [ "$needs_failback" -eq 1 ] && [ "$eth_state" = "up" ]; then
+        if [ "$primary_ok" -eq 1 ]; then
+            if [ "$stability_active" -eq 0 ]; then
+                stability_active=1
+                stable_since=$SECONDS
+                logger -t "$LOG_TAG" "stability window opened; will push USG failback after ${STABLE_THRESHOLD}s"
+            elif [ "$((SECONDS - stable_since))" -ge "$STABLE_THRESHOLD" ]; then
+                if trigger_failback; then
+                    needs_failback=0
+                    stability_active=0
+                    stable_since=0
+                else
+                    # Defer retry by another full stability window.
+                    stable_since=$SECONDS
+                fi
+            fi
+        else
+            if [ "$stability_active" -eq 1 ]; then
+                logger -t "$LOG_TAG" "stability window reset (primary probe imperfect)"
+                stability_active=0
+                stable_since=0
+            fi
+        fi
+    fi
+
+    sleep "$INTERVAL"
+done

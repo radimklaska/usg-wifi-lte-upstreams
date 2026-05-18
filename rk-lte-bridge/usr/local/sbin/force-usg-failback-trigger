@@ -1,0 +1,18 @@
+#!/bin/bash
+# Invoked via authorized_keys forced command. SSH_ORIGINAL_COMMAND picks the
+# action so the restricted key can still do a connectivity test ("ping").
+set -u
+
+cmd="${SSH_ORIGINAL_COMMAND:-failback}"
+case "$cmd" in
+    ping)
+        echo "pong"
+        ;;
+    failback|"")
+        exec sudo -n /usr/local/sbin/force-usg-failback
+        ;;
+    *)
+        echo "unknown command: $cmd" >&2
+        exit 1
+        ;;
+esac

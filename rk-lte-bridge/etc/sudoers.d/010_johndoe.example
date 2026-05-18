@@ -1,0 +1,11 @@
+# Copy to /etc/sudoers.d/010_johndoe, mode 0440 root:root.
+# Always validate with `visudo -cf /etc/sudoers.d/010_johndoe` before
+# trusting the result — a broken sudoers file locks out sudo entirely.
+#
+# This grants the user blanket passwordless sudo. force-usg-failback-trigger
+# only needs NOPASSWD for `/usr/local/sbin/force-usg-failback`, so a
+# tighter variant is preferable if you don't want general NOPASSWD:
+#
+#   johndoe ALL=(root) NOPASSWD: /usr/local/sbin/force-usg-failback
+
+johndoe ALL=(ALL) NOPASSWD: ALL

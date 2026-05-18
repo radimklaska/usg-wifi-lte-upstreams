@@ -1,0 +1,22 @@
+#!/bin/bash
+# Drops eth0 carrier for DOWN_SECONDS so the upstream USG WAN sees link loss
+# and fails over to its other WAN. Used by rk-wifi-bridge to force the USG
+# back to its primary WAN once Trailbus has been stable for a while.
+set -u
+
+LOG_TAG=force-usg-failback
+ETH_IFACE=eth0
+DOWN_SECONDS=30
+LOCK=/run/force-usg-failback.lock
+
+exec 9>"$LOCK"
+if ! flock -n 9; then
+    logger -t "$LOG_TAG" "already running, skipping"
+    exit 1
+fi
+
+logger -t "$LOG_TAG" "dropping ${ETH_IFACE} for ${DOWN_SECONDS}s to force USG failover"
+ip link set "$ETH_IFACE" down || logger -t "$LOG_TAG" "ip link down failed"
+sleep "$DOWN_SECONDS"
+ip link set "$ETH_IFACE" up || logger -t "$LOG_TAG" "ip link up failed"
+logger -t "$LOG_TAG" "${ETH_IFACE} restored"

@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+# Switch the Pi into "M7000 -> USG WAN bridge" router mode.
+# Pre-req: M7000 USB tether already plugged in so the WAN side has internet
+# immediately after reboot (keeps tailscale reachable).
+set -euo pipefail
+
+if [[ $EUID -ne 0 ]]; then
+  echo "router-activate: must run as root (sudo)." >&2
+  exit 1
+fi
+
+echo "[router-activate] Disabling 'Wired connection 1' autoconnect..."
+nmcli connection modify "Wired connection 1" connection.autoconnect no
+
+echo "[router-activate] Enabling router-lan autoconnect..."
+nmcli connection modify router-lan connection.autoconnect yes
+
+echo "[router-activate] Enabling dnsmasq..."
+systemctl enable dnsmasq.service
+
+ts_ip="$(tailscale ip -4 2>/dev/null || true)"
+echo "[router-activate] All set. After reboot, reach the Pi via:"
+echo "  - Tailscale:   ssh johndoe@${ts_ip:-<tailscale-ip>}"
+echo "  - Router link: ssh johndoe@192.168.50.1 (from the USG/LAN side)"
+echo "[router-activate] Rebooting in 5s..."
+sleep 5
+systemctl reboot

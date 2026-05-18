@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+# Revert the Pi back to a plain DHCP client on eth0.
+set -euo pipefail
+
+if [[ $EUID -ne 0 ]]; then
+  echo "router-deactivate: must run as root (sudo)." >&2
+  exit 1
+fi
+
+echo "[router-deactivate] Disabling router-lan autoconnect..."
+nmcli connection modify router-lan connection.autoconnect no
+
+echo "[router-deactivate] Re-enabling 'Wired connection 1' autoconnect..."
+nmcli connection modify "Wired connection 1" connection.autoconnect yes
+
+echo "[router-deactivate] Disabling dnsmasq..."
+systemctl disable dnsmasq.service
+
+echo "[router-deactivate] Rebooting in 5s. After reboot the Pi takes a DHCP lease on eth0."
+sleep 5
+systemctl reboot

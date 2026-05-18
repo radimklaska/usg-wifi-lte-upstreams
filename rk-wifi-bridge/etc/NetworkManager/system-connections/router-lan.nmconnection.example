@@ -1,0 +1,21 @@
+# Copy to /etc/NetworkManager/system-connections/router-lan.nmconnection
+# (drop the .example suffix), chmod 0600 root:root, then
+# `nmcli connection reload && nmcli connection up router-lan`.
+# NetworkManager will fill in a fresh UUID on first import.
+
+[connection]
+id=router-lan
+type=ethernet
+interface-name=eth0
+autoconnect=true
+autoconnect-priority=100
+
+[ipv4]
+method=manual
+address1=192.168.50.1/24
+never-default=true
+ignore-auto-dns=true
+ignore-auto-routes=true
+
+[ipv6]
+method=ignore

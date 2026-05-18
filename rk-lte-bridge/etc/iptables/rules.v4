@@ -1,0 +1,16 @@
+# M7000 -> Pi (USB tether) -> Pi (eth0) -> USG WAN
+# Tether interface presents as usb0 / usb+. Inert until that interface exists.
+*nat
+:PREROUTING ACCEPT [0:0]
+:INPUT ACCEPT [0:0]
+:OUTPUT ACCEPT [0:0]
+:POSTROUTING ACCEPT [0:0]
+-A POSTROUTING -o usb+ -j MASQUERADE
+COMMIT
+*filter
+:INPUT ACCEPT [0:0]
+:FORWARD ACCEPT [0:0]
+:OUTPUT ACCEPT [0:0]
+-A FORWARD -i eth0 -o usb+ -j ACCEPT
+-A FORWARD -i usb+ -o eth0 -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
+COMMIT

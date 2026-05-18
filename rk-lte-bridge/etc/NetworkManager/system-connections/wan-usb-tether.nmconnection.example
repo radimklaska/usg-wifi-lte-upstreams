@@ -1,0 +1,22 @@
+# Copy to /etc/NetworkManager/system-connections/wan-usb-tether.nmconnection
+# (drop the .example suffix), chmod 0600 root:root, then
+# `nmcli connection reload`. NetworkManager will fill in a fresh UUID.
+# Always-on profile for the M7000 RNDIS tether. Allowed to be the default route.
+
+[connection]
+id=wan-usb-tether
+type=ethernet
+interface-name=usb0
+autoconnect=true
+autoconnect-priority=10
+
+[ethernet]
+
+[ipv4]
+method=auto
+
+[ipv6]
+addr-gen-mode=default
+method=auto
+
+[proxy]
