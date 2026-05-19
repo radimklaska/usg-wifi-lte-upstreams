@@ -97,6 +97,33 @@ of the above as long as the box has any working upstream (Wi-Fi, LTE, or
 even another Tailscale node relaying for it). All the SSH commands in this
 repo assume that path.
 
+## Why the TP-Link M7000
+
+Two practical constraints picked this specific 4G hotspot:
+
+- **It exposes USB tethering (RNDIS) out of the box.** The Pi drives the
+  modem over a USB data cable and gets a clean `usb0` network interface —
+  no Wi-Fi client role, no reassociation churn, no contention with the
+  Trailbus-side `wlan0`. Hardware revisions V2 and V3 of the M7000 expose
+  RNDIS; V1 does not. If you're buying one for this build, get a V2 or
+  newer.
+- **The SIM costs nothing on top of an existing O₂ (CZ) mobile tariff.**
+  O₂'s [O2 Connect](https://www.o2.cz/osobni/volani/o2-connect) add-on
+  lets a NEO+ or YOU mobile plan share its calls / SMS / data pool with a
+  separate SIM in a supported "smart device" — and the first connected
+  device receives a 99 Kč monthly discount that fully offsets its fee, so
+  the extra SIM is effectively free. The M7000 is explicitly named on
+  O₂'s allow-list of devices that may carry an O2 Connect SIM, alongside
+  the TP-Link M7200 and the ZTE MF833U1 USB modem (the other allowed
+  categories are notebooks/tablets, cameras and trail cameras,
+  sensors/controllers, and wearables — phones are excluded). Picking a
+  hotspot O₂ already blesses means there's no IMEI-class risk hanging
+  over this WAN.
+
+  ![O₂ Connect supported devices — screenshot from O₂ self-service
+  help, listing TP-Link M7200/M7000 and ZTE MF833U1 as the allowed
+  portable modems](docs/o2-connect-supported-devices.png)
+
 ## Repo layout
 
 ```
